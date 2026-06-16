@@ -1,6 +1,6 @@
 import type { BrefPlayerBio } from "./types.js";
 import { heightToCm, normalizePosition, weightToKg } from "./utils/physical.js";
-import { backoffMs, parseRetryAfterMs, sleep } from "./utils/rateLimiter.js";
+import { backoffMs, jitterMs, parseRetryAfterMs, sleep } from "./utils/rateLimiter.js";
 
 const USER_AGENT = "Mozilla/5.0 (compatible; HoopCentralBioScraper/1.0; +https://github.com/hoopcentral)";
 
@@ -142,11 +142,23 @@ function parseJsonLdBirthPlace(html: string): { hometown: string | null; country
 export class BrefClient {
   private lastRequestAt = 0;
   private cooldownUntil = 0;
+  /** Extra delay added after 429s; decays slowly on success. */
+  private penaltyDelayMs = 0;
 
   constructor(
     private readonly requestDelayMs: number,
-    private readonly indexDelayMs = 6000,
+    private readonly indexDelayMs = 10_000,
   ) {}
+
+  private effectiveDelay(minDelayMs: number): number {
+    return minDelayMs + this.penaltyDelayMs + jitterMs(1500);
+  }
+
+  private decayPenalty(): void {
+    if (this.penaltyDelayMs > 0) {
+      this.penaltyDelayMs = Math.max(0, this.penaltyDelayMs - 500);
+    }
+  }
 
   private async throttle(minDelayMs = this.requestDelayMs): Promise<void> {
     const now = Date.now();
@@ -154,9 +166,10 @@ export class BrefClient {
       await sleep(this.cooldownUntil - now);
     }
 
+    const targetDelay = this.effectiveDelay(minDelayMs);
     const elapsed = Date.now() - this.lastRequestAt;
-    if (elapsed < minDelayMs) {
-      await sleep(minDelayMs - elapsed);
+    if (elapsed < targetDelay) {
+      await sleep(targetDelay - elapsed);
     }
     this.lastRequestAt = Date.now();
   }
@@ -165,7 +178,11 @@ export class BrefClient {
     const retryAfterMs = parseRetryAfterMs(response.headers.get("Retry-After"));
     const waitMs = retryAfterMs ?? backoffMs(attempt);
     this.cooldownUntil = Date.now() + waitMs;
-    console.error(`[bref] rate limited (${response.status}), waiting ${Math.round(waitMs / 1000)}s...`);
+    this.penaltyDelayMs = Math.min(15_000, this.penaltyDelayMs + 3000);
+    console.error(
+      `[bref] rate limited (${response.status}), waiting ${Math.round(waitMs / 1000)}s ` +
+        `(penalty delay now +${this.penaltyDelayMs}ms)...`,
+    );
     await sleep(waitMs);
   }
 
@@ -207,6 +224,7 @@ export class BrefClient {
         throw new BrefClientError(`BRef fetch failed (${response.status}): ${url}`);
       }
 
+      this.decayPenalty();
       return await response.text();
     }
 

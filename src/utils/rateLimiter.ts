@@ -23,3 +23,8 @@ export function parseRetryAfterMs(header: string | null, maxMs = 180_000): numbe
 export function backoffMs(attempt: number, baseMs = 5000, maxMs = 120_000): number {
   return Math.min(maxMs, baseMs * 2 ** (attempt - 1));
 }
+
+/** Small random jitter so requests don't look perfectly periodic. */
+export function jitterMs(maxMs = 1500): number {
+  return Math.floor(Math.random() * maxMs);
+}

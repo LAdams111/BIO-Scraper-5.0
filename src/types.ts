@@ -62,6 +62,7 @@ export interface ScrapeOptions {
   limit?: number;
   playerSlug?: string;
   requestDelayMs: number;
+  indexDelayMs: number;
   checkpointPath: string;
   logPath: string;
   linkCachePath: string;

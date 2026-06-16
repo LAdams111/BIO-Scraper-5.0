@@ -26,7 +26,17 @@ export interface AppConfig {
   hoopCentralApiUrl: string;
   ingestApiKey: string | null;
   requestDelayMs: number;
+  indexDelayMs: number;
 }
+
+/** Default delay between BRef player page fetches (single-player / testing). */
+export const DEFAULT_PLAYER_DELAY_MS = 2500;
+
+/** Conservative backfill pacing — ~6s/player ≈ 9h for full history. */
+export const BACKFILL_PLAYER_DELAY_MS = 6000;
+
+/** Delay between A–Z index letter pages during backfill. */
+export const BACKFILL_INDEX_DELAY_MS = 10_000;
 
 export function loadConfig(): AppConfig {
   const hoopCentralApiUrl = normalizeBaseUrl(
@@ -41,6 +51,13 @@ export function loadConfig(): AppConfig {
   return {
     hoopCentralApiUrl,
     ingestApiKey,
-    requestDelayMs: parseOptionalInt(process.env.SCRAPE_REQUEST_DELAY_MS, 4000),
+    requestDelayMs: parseOptionalInt(
+      process.env.SCRAPE_REQUEST_DELAY_MS,
+      DEFAULT_PLAYER_DELAY_MS,
+    ),
+    indexDelayMs: parseOptionalInt(
+      process.env.SCRAPE_INDEX_DELAY_MS,
+      BACKFILL_INDEX_DELAY_MS,
+    ),
   };
 }

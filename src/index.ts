@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { loadConfig } from "./config.js";
+import { loadConfig, BACKFILL_PLAYER_DELAY_MS, BACKFILL_INDEX_DELAY_MS, DEFAULT_PLAYER_DELAY_MS } from "./config.js";
 import {
   DEFAULT_CHECKPOINT,
   DEFAULT_LINK_CACHE,
@@ -21,7 +21,7 @@ Options:
   --resume               Skip slugs in checkpoint file (default with --backfill)
   --limit <n>            Cap players processed (testing)
   --player-slug <slug>   Single player test (e.g. curryst01)
-  --delay <ms>           Delay between BRef requests (default 3500)
+  --delay <ms>           Delay between BRef player pages (backfill default: 6000)
   --fresh                Ignore checkpoint and reprocess all
   --help                 Show this help
 
@@ -53,7 +53,7 @@ function parseArgs(argv: string[]): ScrapeOptions & { showHelp: boolean } {
       case "--backfill":
         backfill = true;
         resume = true;
-        requestDelayMs = requestDelayMs ?? 4000;
+        requestDelayMs = requestDelayMs ?? BACKFILL_PLAYER_DELAY_MS;
         break;
       case "--dry-run":
         dryRun = true;
@@ -101,7 +101,9 @@ function parseArgs(argv: string[]): ScrapeOptions & { showHelp: boolean } {
     resume: fresh ? false : resume,
     limit,
     playerSlug,
-    requestDelayMs: requestDelayMs ?? 4000,
+    requestDelayMs:
+      requestDelayMs ?? (backfill ? BACKFILL_PLAYER_DELAY_MS : DEFAULT_PLAYER_DELAY_MS),
+    indexDelayMs: BACKFILL_INDEX_DELAY_MS,
     checkpointPath: DEFAULT_CHECKPOINT,
     logPath: DEFAULT_LOG,
     linkCachePath: DEFAULT_LINK_CACHE,
@@ -128,7 +130,10 @@ async function main(): Promise<void> {
 
   const { summary } = await runScrape(config, {
     ...scrapeOptions,
-    requestDelayMs: scrapeOptions.requestDelayMs ?? config.requestDelayMs,
+    requestDelayMs:
+      scrapeOptions.requestDelayMs ??
+      (scrapeOptions.backfill ? BACKFILL_PLAYER_DELAY_MS : config.requestDelayMs),
+    indexDelayMs: scrapeOptions.indexDelayMs ?? config.indexDelayMs,
   });
 
   printSummary(summary, args.dryRun);

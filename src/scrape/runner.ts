@@ -48,8 +48,16 @@ export async function runScrape(
   config: AppConfig,
   options: ScrapeOptions,
 ): Promise<{ summary: ScrapeSummary }> {
-  const bref = new BrefClient(options.requestDelayMs);
+  const bref = new BrefClient(options.requestDelayMs, options.indexDelayMs);
   const ingest = new IngestClient(config.hoopCentralApiUrl, config.ingestApiKey);
+
+  if (options.backfill) {
+    console.log(
+      `BRef pacing: ${options.requestDelayMs}ms between player pages, ` +
+        `${options.indexDelayMs}ms between index letters (+ jitter, slows further after 429).`,
+    );
+    console.log("");
+  }
 
   let checkpoint = ensureCheckpoint(
     options.resume ? loadCheckpoint(options.checkpointPath) : null,
