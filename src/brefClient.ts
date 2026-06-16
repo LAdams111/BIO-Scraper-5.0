@@ -143,7 +143,7 @@ export class BrefClient {
 
   constructor(
     private readonly requestDelayMs: number,
-    private readonly indexDelayMs = 4000,
+    private readonly indexDelayMs = 6000,
   ) {}
 
   private async throttle(minDelayMs = this.requestDelayMs): Promise<void> {

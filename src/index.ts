@@ -53,7 +53,7 @@ function parseArgs(argv: string[]): ScrapeOptions & { showHelp: boolean } {
       case "--backfill":
         backfill = true;
         resume = true;
-        requestDelayMs = requestDelayMs ?? 3500;
+        requestDelayMs = requestDelayMs ?? 4000;
         break;
       case "--dry-run":
         dryRun = true;
@@ -101,7 +101,7 @@ function parseArgs(argv: string[]): ScrapeOptions & { showHelp: boolean } {
     resume: fresh ? false : resume,
     limit,
     playerSlug,
-    requestDelayMs: requestDelayMs ?? 3500,
+    requestDelayMs: requestDelayMs ?? 4000,
     checkpointPath: DEFAULT_CHECKPOINT,
     logPath: DEFAULT_LOG,
     linkCachePath: DEFAULT_LINK_CACHE,

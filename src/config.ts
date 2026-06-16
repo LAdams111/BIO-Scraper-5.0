@@ -41,6 +41,6 @@ export function loadConfig(): AppConfig {
   return {
     hoopCentralApiUrl,
     ingestApiKey,
-    requestDelayMs: parseOptionalInt(process.env.SCRAPE_REQUEST_DELAY_MS, 3500),
+    requestDelayMs: parseOptionalInt(process.env.SCRAPE_REQUEST_DELAY_MS, 4000),
   };
 }
