@@ -17,6 +17,7 @@ import {
   matchBdlExternalId,
   saveLinkCache,
 } from "./checkpoint.js";
+import { loadSlugCache, saveSlugCache } from "./slugCache.js";
 
 function bioToPayload(
   bio: BrefPlayerBio,
@@ -53,8 +54,16 @@ export async function runScrape(
   if (options.playerSlug) {
     slugs = [options.playerSlug.toLowerCase()];
   } else if (options.backfill) {
-    console.log("Crawling BRef player index A–Z...");
-    slugs = await bref.listAllSlugs();
+    const cachedSlugs = loadSlugCache(options.slugCachePath);
+    if (cachedSlugs?.length) {
+      console.log(`Using cached BRef slug index (${cachedSlugs.length} players).`);
+      slugs = cachedSlugs;
+    } else {
+      console.log("Crawling BRef player index A–Z...");
+      slugs = await bref.listAllSlugs();
+      saveSlugCache(options.slugCachePath, slugs);
+      console.log(`Cached ${slugs.length} player slugs.`);
+    }
   } else {
     throw new Error("Specify --backfill or --player-slug");
   }

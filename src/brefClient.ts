@@ -1,5 +1,6 @@
 import type { BrefPlayerBio } from "./types.js";
 import { heightToCm, normalizePosition, weightToKg } from "./utils/physical.js";
+import { backoffMs, parseRetryAfterMs, sleep } from "./utils/rateLimiter.js";
 
 const USER_AGENT = "Mozilla/5.0 (compatible; HoopCentralBioScraper/1.0; +https://github.com/hoopcentral)";
 
@@ -87,10 +88,6 @@ export class BrefClientError extends Error {
   }
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function countryFromFlagClass(className: string): string | null {
   const match = /\bf-([a-z]{2})\b/.exec(className);
   if (!match) return null;
@@ -142,47 +139,72 @@ function parseJsonLdBirthPlace(html: string): { hometown: string | null; country
 
 export class BrefClient {
   private lastRequestAt = 0;
+  private cooldownUntil = 0;
 
-  constructor(private readonly requestDelayMs: number) {}
+  constructor(
+    private readonly requestDelayMs: number,
+    private readonly indexDelayMs = 4000,
+  ) {}
 
-  private async throttle(): Promise<void> {
+  private async throttle(minDelayMs = this.requestDelayMs): Promise<void> {
+    const now = Date.now();
+    if (now < this.cooldownUntil) {
+      await sleep(this.cooldownUntil - now);
+    }
+
     const elapsed = Date.now() - this.lastRequestAt;
-    if (elapsed < this.requestDelayMs) {
-      await sleep(this.requestDelayMs - elapsed);
+    if (elapsed < minDelayMs) {
+      await sleep(minDelayMs - elapsed);
     }
     this.lastRequestAt = Date.now();
   }
 
-  async fetchHtml(url: string, retries = 3): Promise<string> {
+  private async applyRateLimitCooldown(response: Response, attempt: number): Promise<void> {
+    const retryAfterMs = parseRetryAfterMs(response.headers.get("Retry-After"));
+    const waitMs = retryAfterMs ?? backoffMs(attempt);
+    this.cooldownUntil = Date.now() + waitMs;
+    console.error(`[bref] rate limited (${response.status}), waiting ${Math.round(waitMs / 1000)}s...`);
+    await sleep(waitMs);
+  }
+
+  async fetchHtml(url: string, retries = 8): Promise<string> {
     for (let attempt = 1; attempt <= retries; attempt += 1) {
       await this.throttle();
+
+      let response: Response;
       try {
-        const response = await fetch(url, {
+        response = await fetch(url, {
           headers: {
             "User-Agent": USER_AGENT,
             Accept: "text/html,application/xhtml+xml",
           },
         });
-
-        if (response.status === 429 || response.status >= 500) {
-          if (attempt < retries) {
-            await sleep(1000 * attempt);
-            continue;
-          }
-        }
-
-        if (!response.ok) {
-          throw new BrefClientError(`BRef fetch failed (${response.status}): ${url}`);
-        }
-
-        return await response.text();
       } catch (error) {
         if (attempt === retries) {
           const message = error instanceof Error ? error.message : String(error);
           throw new BrefClientError(message);
         }
-        await sleep(1000 * attempt);
+        await sleep(backoffMs(attempt, 2000));
+        continue;
       }
+
+      if (response.status === 429 || response.status === 503) {
+        if (attempt < retries) {
+          await this.applyRateLimitCooldown(response, attempt);
+          continue;
+        }
+      } else if (response.status >= 500) {
+        if (attempt < retries) {
+          await sleep(backoffMs(attempt, 3000));
+          continue;
+        }
+      }
+
+      if (!response.ok) {
+        throw new BrefClientError(`BRef fetch failed (${response.status}): ${url}`);
+      }
+
+      return await response.text();
     }
 
     throw new BrefClientError(`Failed to fetch ${url}`);
@@ -217,6 +239,7 @@ export class BrefClient {
     const all = new Set<string>();
 
     for (const letter of letters) {
+      await this.throttle(this.indexDelayMs);
       const slugs = await this.listSlugsForLetter(letter);
       for (const slug of slugs) all.add(slug);
       console.log(`[index] ${letter.toUpperCase()}: ${slugs.length} players`);

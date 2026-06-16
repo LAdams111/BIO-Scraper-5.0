@@ -5,6 +5,7 @@ import {
   DEFAULT_LINK_CACHE,
   DEFAULT_LOG,
 } from "./scrape/checkpoint.js";
+import { DEFAULT_SLUG_CACHE } from "./scrape/slugCache.js";
 import { printSummary, runScrape } from "./scrape/runner.js";
 import type { ScrapeOptions } from "./types.js";
 
@@ -20,7 +21,7 @@ Options:
   --resume               Skip slugs in checkpoint file (default with --backfill)
   --limit <n>            Cap players processed (testing)
   --player-slug <slug>   Single player test (e.g. curryst01)
-  --delay <ms>           Delay between BRef requests (default 2000)
+  --delay <ms>           Delay between BRef requests (default 3500)
   --fresh                Ignore checkpoint and reprocess all
   --help                 Show this help
 
@@ -52,6 +53,7 @@ function parseArgs(argv: string[]): ScrapeOptions & { showHelp: boolean } {
       case "--backfill":
         backfill = true;
         resume = true;
+        requestDelayMs = requestDelayMs ?? 3500;
         break;
       case "--dry-run":
         dryRun = true;
@@ -99,10 +101,11 @@ function parseArgs(argv: string[]): ScrapeOptions & { showHelp: boolean } {
     resume: fresh ? false : resume,
     limit,
     playerSlug,
-    requestDelayMs: requestDelayMs ?? 2000,
+    requestDelayMs: requestDelayMs ?? 3500,
     checkpointPath: DEFAULT_CHECKPOINT,
     logPath: DEFAULT_LOG,
     linkCachePath: DEFAULT_LINK_CACHE,
+    slugCachePath: DEFAULT_SLUG_CACHE,
     showHelp,
   };
 }

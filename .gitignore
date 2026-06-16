@@ -146,3 +146,4 @@ vite.config.ts.timestamp-*
 scrape-bio-backfill.checkpoint.json
 scrape-bio-backfill.log
 bref-to-bdl.cache.json
+bref-player-slugs.cache.json

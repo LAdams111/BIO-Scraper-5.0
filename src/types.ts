@@ -65,6 +65,7 @@ export interface ScrapeOptions {
   checkpointPath: string;
   logPath: string;
   linkCachePath: string;
+  slugCachePath: string;
 }
 
 export interface ScrapeSummary {
