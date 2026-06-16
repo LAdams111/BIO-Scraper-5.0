@@ -1,0 +1,28 @@
+{
+  "name": "scraper-bio",
+  "version": "1.0.0",
+  "description": "Basketball Reference bio scraper for Hoop Central",
+  "type": "module",
+  "main": "dist/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/index.js",
+    "scrape": "node dist/index.js",
+    "scrape:backfill": "node dist/index.js --backfill",
+    "scrape:dry-run": "node dist/index.js --dry-run"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}
