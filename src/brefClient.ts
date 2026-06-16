@@ -88,6 +88,8 @@ export class BrefClientError extends Error {
   }
 }
 
+export class BrefRateLimitError extends BrefClientError {}
+
 function countryFromFlagClass(className: string): string | null {
   const match = /\bf-([a-z]{2})\b/.exec(className);
   if (!match) return null;
@@ -193,6 +195,7 @@ export class BrefClient {
           await this.applyRateLimitCooldown(response, attempt);
           continue;
         }
+        throw new BrefRateLimitError(`BRef rate limited (${response.status}): ${url}`);
       } else if (response.status >= 500) {
         if (attempt < retries) {
           await sleep(backoffMs(attempt, 3000));

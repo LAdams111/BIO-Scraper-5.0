@@ -1,5 +1,5 @@
 import type { AppConfig } from "../config.js";
-import { BrefClient } from "../brefClient.js";
+import { BrefClient, BrefRateLimitError } from "../brefClient.js";
 import { IngestClient } from "../ingestClient.js";
 import type {
   BrefPlayerBio,
@@ -15,6 +15,7 @@ import {
   loadLinkCache,
   markSlugComplete,
   matchBdlExternalId,
+  saveCheckpointSlugs,
   saveLinkCache,
 } from "./checkpoint.js";
 import { loadSlugCache, saveSlugCache } from "./slugCache.js";
@@ -50,27 +51,41 @@ export async function runScrape(
   const bref = new BrefClient(options.requestDelayMs);
   const ingest = new IngestClient(config.hoopCentralApiUrl, config.ingestApiKey);
 
+  let checkpoint = ensureCheckpoint(
+    options.resume ? loadCheckpoint(options.checkpointPath) : null,
+  );
+
   let slugs: string[];
   if (options.playerSlug) {
     slugs = [options.playerSlug.toLowerCase()];
   } else if (options.backfill) {
-    const cachedSlugs = loadSlugCache(options.slugCachePath);
+    const cachedSlugs =
+      loadSlugCache(options.slugCachePath) ?? checkpoint.allSlugs ?? null;
+
     if (cachedSlugs?.length) {
-      console.log(`Using cached BRef slug index (${cachedSlugs.length} players).`);
+      console.log(`Using saved BRef slug index (${cachedSlugs.length} players).`);
       slugs = cachedSlugs;
     } else {
       console.log("Crawling BRef player index A–Z...");
-      slugs = await bref.listAllSlugs();
+      try {
+        slugs = await bref.listAllSlugs();
+      } catch (error) {
+        if (error instanceof BrefRateLimitError) {
+          throw new Error(
+            `${error.message}\n\nBRef is temporarily rate limiting this IP. ` +
+              "Wait 1–2 hours before resuming. Your completed players are saved in the checkpoint.",
+          );
+        }
+        throw error;
+      }
       saveSlugCache(options.slugCachePath, slugs);
+      checkpoint = saveCheckpointSlugs(checkpoint, slugs, options.checkpointPath);
       console.log(`Cached ${slugs.length} player slugs.`);
     }
   } else {
     throw new Error("Specify --backfill or --player-slug");
   }
 
-  let checkpoint = ensureCheckpoint(
-    options.resume ? loadCheckpoint(options.checkpointPath) : null,
-  );
   const completed = new Set(checkpoint.completedSlugs);
   let pending = slugs.filter((slug) => !completed.has(slug));
 
@@ -150,6 +165,13 @@ export async function runScrape(
       const message = error instanceof Error ? error.message : String(error);
       console.error(`${label}: FAILED — ${message}`);
       appendLog(options.logPath, `FAIL ${slug}: ${message}`);
+
+      if (error instanceof BrefRateLimitError) {
+        console.error(
+          "\nStopping backfill — BRef rate limit reached. Wait 1–2 hours, then resume with --resume.",
+        );
+        break;
+      }
     }
   }
 

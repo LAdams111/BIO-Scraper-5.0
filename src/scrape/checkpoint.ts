@@ -8,6 +8,7 @@ export const DEFAULT_LINK_CACHE = "bref-to-bdl.cache.json";
 export interface BioCheckpoint {
   version: 1;
   completedSlugs: string[];
+  allSlugs?: string[];
   updatedAt: string;
 }
 
@@ -40,6 +41,17 @@ export function ensureCheckpoint(checkpoint: BioCheckpoint | null): BioCheckpoin
       updatedAt: new Date().toISOString(),
     }
   );
+}
+
+export function saveCheckpointSlugs(
+  checkpoint: BioCheckpoint,
+  allSlugs: string[],
+  path: string,
+): BioCheckpoint {
+  checkpoint.allSlugs = allSlugs;
+  checkpoint.updatedAt = new Date().toISOString();
+  saveCheckpoint(path, checkpoint);
+  return checkpoint;
 }
 
 export function markSlugComplete(
