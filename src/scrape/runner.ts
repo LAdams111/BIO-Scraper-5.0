@@ -1,6 +1,7 @@
 import type { AppConfig } from "../config.js";
 import { BrefClient, BrefRateLimitError } from "../brefClient.js";
 import { IngestClient } from "../ingestClient.js";
+import { getLeagueConfig } from "../league.js";
 import type {
   BrefPlayerBio,
   HoopCentralBioPayload,
@@ -22,10 +23,11 @@ import { loadSlugCache, saveSlugCache } from "./slugCache.js";
 
 function bioToPayload(
   bio: BrefPlayerBio,
+  bioSource: string,
   linkTo?: { source: string; externalId: string },
 ): HoopCentralBioPayload {
   const payload: HoopCentralBioPayload = {
-    source: "basketball-reference",
+    source: bioSource,
     externalId: bio.slug,
     player: {
       displayName: bio.displayName,
@@ -48,10 +50,17 @@ export async function runScrape(
   config: AppConfig,
   options: ScrapeOptions,
 ): Promise<{ summary: ScrapeSummary }> {
-  const bref = new BrefClient(options.requestDelayMs, options.indexDelayMs);
+  const league = getLeagueConfig(options.league);
+  const bref = new BrefClient(
+    options.requestDelayMs,
+    options.indexDelayMs,
+    league.playersPath,
+    league.slugFilter,
+  );
   const ingest = new IngestClient(config.hoopCentralApiUrl, config.ingestApiKey);
 
   if (options.backfill) {
+    console.log(`League: ${league.label}`);
     console.log(
       `BRef pacing: ${options.requestDelayMs}ms between player pages, ` +
         `${options.indexDelayMs}ms between index letters (+ jitter, slows further after 429).`,
@@ -71,10 +80,10 @@ export async function runScrape(
       loadSlugCache(options.slugCachePath) ?? checkpoint.allSlugs ?? null;
 
     if (cachedSlugs?.length) {
-      console.log(`Using saved BRef slug index (${cachedSlugs.length} players).`);
+      console.log(`Using saved BRef slug index (${cachedSlugs.length} ${league.label} players).`);
       slugs = cachedSlugs;
     } else {
-      console.log("Crawling BRef player index A–Z...");
+      console.log(`Crawling BRef ${league.label} player index A–Z...`);
       try {
         slugs = await bref.listAllSlugs();
       } catch (error) {
@@ -127,27 +136,29 @@ export async function runScrape(
       console.log(`${label}: ${bio.displayName}`);
 
       let linkTo: { source: string; externalId: string } | undefined;
-      const cachedBdlId = linkCache.mappings[slug];
-      if (cachedBdlId) {
-        linkTo = { source: "balldontlie", externalId: cachedBdlId };
-      } else {
-        if (!hcStatusLoaded) {
-          console.log("Loading balldontlie completion status from Hoop Central...");
-          const status = await ingest.getCompletionStatus("balldontlie");
-          byName = buildBdlLookup(status.players);
-          hcStatusLoaded = true;
-          console.log(`Cached ${status.players.length} balldontlie player(s) for linking.`);
-        }
+      if (league.linkSource) {
+        const cachedLinkId = linkCache.mappings[slug];
+        if (cachedLinkId) {
+          linkTo = { source: league.linkSource, externalId: cachedLinkId };
+        } else {
+          if (!hcStatusLoaded) {
+            console.log(`Loading ${league.linkSource} completion status from Hoop Central...`);
+            const status = await ingest.getCompletionStatus(league.linkSource);
+            byName = buildBdlLookup(status.players);
+            hcStatusLoaded = true;
+            console.log(`Cached ${status.players.length} ${league.linkSource} player(s) for linking.`);
+          }
 
-        const matchedId = matchBdlExternalId(bio.displayName, bio.birthDate, byName);
-        if (matchedId) {
-          linkTo = { source: "balldontlie", externalId: matchedId };
-          linkCache.mappings[slug] = matchedId;
-          saveLinkCache(options.linkCachePath, linkCache);
+          const matchedId = matchBdlExternalId(bio.displayName, bio.birthDate, byName);
+          if (matchedId) {
+            linkTo = { source: league.linkSource, externalId: matchedId };
+            linkCache.mappings[slug] = matchedId;
+            saveLinkCache(options.linkCachePath, linkCache);
+          }
         }
       }
 
-      const payload = bioToPayload(bio, linkTo);
+      const payload = bioToPayload(bio, league.bioSource, linkTo);
 
       if (options.dryRun) {
         console.log(JSON.stringify(payload, null, 2));

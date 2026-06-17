@@ -147,3 +147,7 @@ scrape-bio-backfill.checkpoint.json
 scrape-bio-backfill.log
 bref-to-bdl.cache.json
 bref-player-slugs.cache.json
+scrape-bio-wnba-backfill.checkpoint.json
+scrape-bio-wnba-backfill.log
+bref-wnba-link.cache.json
+bref-wnba-player-slugs.cache.json

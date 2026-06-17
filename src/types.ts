@@ -12,7 +12,7 @@ export interface BrefPlayerBio {
 }
 
 export interface HoopCentralBioPayload {
-  source: "basketball-reference";
+  source: string;
   externalId: string;
   player: {
     displayName: string;
@@ -55,7 +55,10 @@ export interface HcPlayerStatus {
   }>;
 }
 
+import type { ScrapeLeague } from "./league.js";
+
 export interface ScrapeOptions {
+  league: ScrapeLeague;
   backfill: boolean;
   dryRun: boolean;
   resume: boolean;

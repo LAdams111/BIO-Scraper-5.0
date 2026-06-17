@@ -148,6 +148,8 @@ export class BrefClient {
   constructor(
     private readonly requestDelayMs: number,
     private readonly indexDelayMs = 10_000,
+    private readonly playersPath = "players",
+    private readonly slugFilter: (slug: string) => boolean = () => true,
   ) {}
 
   private effectiveDelay(minDelayMs: number): number {
@@ -233,23 +235,31 @@ export class BrefClient {
 
   playerUrl(slug: string): string {
     const letter = slug.slice(0, 1).toLowerCase();
-    return `https://www.basketball-reference.com/players/${letter}/${slug}.html`;
+    return `https://www.basketball-reference.com/${this.playersPath}/${letter}/${slug}.html`;
   }
 
   indexUrl(letter: string): string {
-    return `https://www.basketball-reference.com/players/${letter.toLowerCase()}/`;
+    return `https://www.basketball-reference.com/${this.playersPath}/${letter.toLowerCase()}/`;
+  }
+
+  private addSlug(slugs: Set<string>, slug: string): void {
+    const normalized = slug.toLowerCase();
+    if (this.slugFilter(normalized)) slugs.add(normalized);
   }
 
   async listSlugsForLetter(letter: string): Promise<string[]> {
     const html = await this.fetchHtml(this.indexUrl(letter));
     const slugs = new Set<string>();
+    const pathPattern = this.playersPath.replace("/", "\\/");
 
     for (const match of html.matchAll(/data-append-csv="([a-z0-9]+)"/gi)) {
-      slugs.add(match[1].toLowerCase());
+      this.addSlug(slugs, match[1]);
     }
 
-    for (const match of html.matchAll(/href="\/players\/[a-z]\/([a-z0-9]+)\.html"/gi)) {
-      slugs.add(match[1].toLowerCase());
+    for (const match of html.matchAll(
+      new RegExp(`href="/${pathPattern}/[a-z]/([a-z0-9]+)\\.html"`, "gi"),
+    )) {
+      this.addSlug(slugs, match[1]);
     }
 
     return [...slugs].sort();

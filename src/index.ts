@@ -1,11 +1,6 @@
 #!/usr/bin/env node
 import { loadConfig, BACKFILL_PLAYER_DELAY_MS, BACKFILL_INDEX_DELAY_MS, DEFAULT_PLAYER_DELAY_MS } from "./config.js";
-import {
-  DEFAULT_CHECKPOINT,
-  DEFAULT_LINK_CACHE,
-  DEFAULT_LOG,
-} from "./scrape/checkpoint.js";
-import { DEFAULT_SLUG_CACHE } from "./scrape/slugCache.js";
+import { getLeagueConfig, parseLeague } from "./league.js";
 import { printSummary, runScrape } from "./scrape/runner.js";
 import type { ScrapeOptions } from "./types.js";
 
@@ -16,11 +11,12 @@ Usage:
   npm run scrape -- [options]
 
 Options:
-  --backfill             Crawl BRef A–Z index and ingest all NBA players
+  --league <nba|wnba>    League to scrape (default: nba)
+  --backfill             Crawl BRef A–Z index and ingest all players
   --dry-run              Parse and log payload; do not POST
   --resume               Skip slugs in checkpoint file (default with --backfill)
   --limit <n>            Cap players processed (testing)
-  --player-slug <slug>   Single player test (e.g. curryst01)
+  --player-slug <slug>   Single player test (e.g. curryst01 or digginsk01w)
   --delay <ms>           Delay between BRef player pages (backfill default: 6000)
   --fresh                Ignore checkpoint and reprocess all
   --help                 Show this help
@@ -28,12 +24,15 @@ Options:
 Examples:
   npm run scrape:dry-run -- --player-slug curryst01
   npm run scrape -- --player-slug curryst01
+  npm run scrape:dry-run -- --league wnba --player-slug digginsk01w
   npm run scrape:dry-run -- --backfill --limit 5
   npm run scrape:backfill -- --resume
+  npm run scrape:wnba-backfill -- --resume
 `);
 }
 
 function parseArgs(argv: string[]): ScrapeOptions & { showHelp: boolean } {
+  let league = "nba" as ScrapeOptions["league"];
   let backfill = false;
   let dryRun = false;
   let resume = false;
@@ -50,6 +49,12 @@ function parseArgs(argv: string[]): ScrapeOptions & { showHelp: boolean } {
       case "-h":
         showHelp = true;
         break;
+      case "--league": {
+        const value = argv[++i];
+        if (!value) throw new Error("--league requires a value");
+        league = parseLeague(value);
+        break;
+      }
       case "--backfill":
         backfill = true;
         resume = true;
@@ -95,7 +100,10 @@ function parseArgs(argv: string[]): ScrapeOptions & { showHelp: boolean } {
     showHelp = true;
   }
 
+  const leagueConfig = getLeagueConfig(league);
+
   return {
+    league,
     backfill,
     dryRun,
     resume: fresh ? false : resume,
@@ -104,10 +112,10 @@ function parseArgs(argv: string[]): ScrapeOptions & { showHelp: boolean } {
     requestDelayMs:
       requestDelayMs ?? (backfill ? BACKFILL_PLAYER_DELAY_MS : DEFAULT_PLAYER_DELAY_MS),
     indexDelayMs: BACKFILL_INDEX_DELAY_MS,
-    checkpointPath: DEFAULT_CHECKPOINT,
-    logPath: DEFAULT_LOG,
-    linkCachePath: DEFAULT_LINK_CACHE,
-    slugCachePath: DEFAULT_SLUG_CACHE,
+    checkpointPath: leagueConfig.checkpointPath,
+    logPath: leagueConfig.logPath,
+    linkCachePath: leagueConfig.linkCachePath,
+    slugCachePath: leagueConfig.slugCachePath,
     showHelp,
   };
 }
@@ -122,8 +130,10 @@ async function main(): Promise<void> {
 
   const config = loadConfig();
   const { showHelp: _showHelp, ...scrapeOptions } = args;
+  const leagueConfig = getLeagueConfig(scrapeOptions.league);
 
   console.log("Starting BIO-Scraper");
+  console.log(`League: ${leagueConfig.label}`);
   console.log(`Target: ${config.hoopCentralApiUrl}`);
   console.log(`Mode: ${args.dryRun ? "dry-run" : "live ingest"}`);
   console.log("");
