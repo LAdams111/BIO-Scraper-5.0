@@ -55,6 +55,20 @@ export interface HcPlayerStatus {
   }>;
 }
 
+export interface HcPlayerProfile {
+  id: number;
+  name: string;
+  position: string | null;
+  height: string | null;
+  weight: string | null;
+  jerseyNumber: string | null;
+  hometown: string | null;
+  country: string | null;
+  headshotUrl: string | null;
+  birthDate: string | null;
+  leaguesPlayed?: string[];
+}
+
 import type { ScrapeLeague } from "./league.js";
 
 export interface ScrapeOptions {

@@ -1,4 +1,5 @@
 import type {
+  HcPlayerProfile,
   HcPlayerStatus,
   HoopCentralBioPayload,
   HoopCentralBioResponse,
@@ -75,6 +76,35 @@ export class IngestClient {
     }
 
     return body as { source: string; players: HcPlayerStatus[] };
+  }
+
+  async getPlayerProfile(playerId: number): Promise<HcPlayerProfile> {
+    const url = `${this.baseUrl}/api/players/${playerId}`;
+    const response = await fetch(url, { headers: this.headers() });
+    const text = await response.text();
+
+    let body: unknown = null;
+    if (text) {
+      try {
+        body = JSON.parse(text) as unknown;
+      } catch {
+        throw new IngestClientError(
+          `Invalid JSON from Hoop Central (${response.status})`,
+          response.status,
+          text,
+        );
+      }
+    }
+
+    if (!response.ok) {
+      throw new IngestClientError(
+        `Player profile failed (${response.status}): ${formatIngestError(body, text, response.statusText)}`,
+        response.status,
+        body,
+      );
+    }
+
+    return body as HcPlayerProfile;
   }
 
   async sendPlayerBio(payload: HoopCentralBioPayload): Promise<HoopCentralBioResponse> {

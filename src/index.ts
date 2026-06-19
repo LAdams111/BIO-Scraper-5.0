@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { loadConfig, BACKFILL_PLAYER_DELAY_MS, BACKFILL_INDEX_DELAY_MS, DEFAULT_PLAYER_DELAY_MS } from "./config.js";
 import { getLeagueConfig, parseLeague } from "./league.js";
+import { printNcaaSummary, runNcaaScrape } from "./scrape/ncaaRunner.js";
 import { printSummary, runScrape } from "./scrape/runner.js";
 import type { ScrapeOptions } from "./types.js";
 
@@ -11,12 +12,13 @@ Usage:
   npm run scrape -- [options]
 
 Options:
-  --league <nba|wnba>    League to scrape (default: nba)
-  --backfill             Crawl BRef A–Z index and ingest all players
+  --league <nba|wnba|ncaa>  League to scrape (default: nba)
+  --backfill             Crawl BRef A–Z index and ingest all players (nba/wnba)
+                         or process all Hoop Central NCAA players missing bios (ncaa)
   --dry-run              Parse and log payload; do not POST
   --resume               Skip slugs in checkpoint file (default with --backfill)
   --limit <n>            Cap players processed (testing)
-  --player-slug <slug>   Single player test (e.g. curryst01 or digginsk01w)
+  --player-slug <slug>   Single player test (BRef slug, or NCAA usbasket externalId)
   --delay <ms>           Delay between BRef player pages (backfill default: 6000)
   --fresh                Ignore checkpoint and reprocess all
   --help                 Show this help
@@ -28,6 +30,8 @@ Examples:
   npm run scrape:dry-run -- --backfill --limit 5
   npm run scrape:backfill -- --resume
   npm run scrape:wnba-backfill -- --resume
+  npm run scrape:ncaa-backfill -- --resume
+  npm run scrape:dry-run -- --league ncaa --backfill --limit 5
 `);
 }
 
@@ -138,13 +142,22 @@ async function main(): Promise<void> {
   console.log(`Mode: ${args.dryRun ? "dry-run" : "live ingest"}`);
   console.log("");
 
-  const { summary } = await runScrape(config, {
+  const runOptions = {
     ...scrapeOptions,
     requestDelayMs:
       scrapeOptions.requestDelayMs ??
       (scrapeOptions.backfill ? BACKFILL_PLAYER_DELAY_MS : config.requestDelayMs),
     indexDelayMs: scrapeOptions.indexDelayMs ?? config.indexDelayMs,
-  });
+  };
+
+  if (scrapeOptions.league === "ncaa") {
+    const { summary } = await runNcaaScrape(config, runOptions);
+    printNcaaSummary(summary, args.dryRun);
+    process.exit(summary.failed > 0 ? 1 : 0);
+    return;
+  }
+
+  const { summary } = await runScrape(config, runOptions);
 
   printSummary(summary, args.dryRun);
   process.exit(summary.failed > 0 ? 1 : 0);

@@ -151,3 +151,7 @@ scrape-bio-wnba-backfill.checkpoint.json
 scrape-bio-wnba-backfill.log
 bref-wnba-link.cache.json
 bref-wnba-player-slugs.cache.json
+scrape-bio-ncaa-backfill.checkpoint.json
+scrape-bio-ncaa-backfill.log
+ncaa-cbb-slug.cache.json
+ncaa-player-external-ids.cache.json

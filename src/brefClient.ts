@@ -1,4 +1,5 @@
 import type { BrefPlayerBio } from "./types.js";
+import { inferCountryFromLocation } from "./utils/bio.js";
 import { heightToCm, normalizePosition, weightToKg } from "./utils/physical.js";
 import { backoffMs, jitterMs, parseRetryAfterMs, sleep } from "./utils/rateLimiter.js";
 
@@ -139,18 +140,33 @@ function parseJsonLdBirthPlace(html: string): { hometown: string | null; country
   };
 }
 
+export interface BrefClientOptions {
+  baseUrl?: string;
+  flatPlayerPaths?: boolean;
+  indexSuffix?: string;
+}
+
 export class BrefClient {
   private lastRequestAt = 0;
   private cooldownUntil = 0;
   /** Extra delay added after 429s; decays slowly on success. */
   private penaltyDelayMs = 0;
 
+  protected readonly baseUrl: string;
+  protected readonly flatPlayerPaths: boolean;
+  protected readonly indexSuffix: string;
+
   constructor(
-    private readonly requestDelayMs: number,
-    private readonly indexDelayMs = 10_000,
-    private readonly playersPath = "players",
-    private readonly slugFilter: (slug: string) => boolean = () => true,
-  ) {}
+    protected readonly requestDelayMs: number,
+    protected readonly indexDelayMs = 10_000,
+    protected readonly playersPath = "players",
+    protected readonly slugFilter: (slug: string) => boolean = () => true,
+    options: BrefClientOptions = {},
+  ) {
+    this.baseUrl = options.baseUrl ?? "https://www.basketball-reference.com";
+    this.flatPlayerPaths = options.flatPlayerPaths ?? false;
+    this.indexSuffix = options.indexSuffix ?? "/";
+  }
 
   private effectiveDelay(minDelayMs: number): number {
     return minDelayMs + this.penaltyDelayMs + jitterMs(1500);
@@ -234,21 +250,25 @@ export class BrefClient {
   }
 
   playerUrl(slug: string): string {
-    const letter = slug.slice(0, 1).toLowerCase();
-    return `https://www.basketball-reference.com/${this.playersPath}/${letter}/${slug}.html`;
+    const normalized = slug.toLowerCase();
+    if (this.flatPlayerPaths) {
+      return `${this.baseUrl}/${this.playersPath}/${normalized}.html`;
+    }
+
+    const letter = normalized.slice(0, 1);
+    return `${this.baseUrl}/${this.playersPath}/${letter}/${normalized}.html`;
   }
 
   indexUrl(letter: string): string {
-    return `https://www.basketball-reference.com/${this.playersPath}/${letter.toLowerCase()}/`;
+    return `${this.baseUrl}/${this.playersPath}/${letter.toLowerCase()}${this.indexSuffix}`;
   }
 
-  private addSlug(slugs: Set<string>, slug: string): void {
+  protected addSlug(slugs: Set<string>, slug: string): void {
     const normalized = slug.toLowerCase();
     if (this.slugFilter(normalized)) slugs.add(normalized);
   }
 
-  async listSlugsForLetter(letter: string): Promise<string[]> {
-    const html = await this.fetchHtml(this.indexUrl(letter));
+  protected extractSlugsFromIndexHtml(html: string): string[] {
     const slugs = new Set<string>();
     const pathPattern = this.playersPath.replace("/", "\\/");
 
@@ -263,6 +283,11 @@ export class BrefClient {
     }
 
     return [...slugs].sort();
+  }
+
+  async listSlugsForLetter(letter: string): Promise<string[]> {
+    const html = await this.fetchHtml(this.indexUrl(letter));
+    return this.extractSlugsFromIndexHtml(html);
   }
 
   async listAllSlugs(): Promise<string[]> {
@@ -302,11 +327,19 @@ export class BrefClient {
     let heightRaw: string | null = null;
     let weightRaw: string | null = null;
     $("#meta p").each((_, el) => {
+      const text = $(el).text().replace(/\s+/g, " ").trim();
       const heightSpan = $(el).find("span").first().text().trim();
       const weightSpan = $(el).find("span").eq(1).text().trim();
       if (/^\d-\d/.test(heightSpan) && /lb/i.test(weightSpan)) {
         heightRaw = heightSpan;
         weightRaw = weightSpan.replace(/lb/i, "").trim();
+        return;
+      }
+
+      const inlineMatch = /(\d-\d+(?:\.\d+)?)\s*,?\s*(\d+(?:\.\d+)?)\s*lb/i.exec(text);
+      if (inlineMatch) {
+        heightRaw = heightRaw ?? inlineMatch[1];
+        weightRaw = weightRaw ?? inlineMatch[2];
       }
     });
 
@@ -315,6 +348,12 @@ export class BrefClient {
 
     $("#meta p").each((_, el) => {
       const text = $(el).text().replace(/\s+/g, " ").trim();
+      if (/^Hometown:/i.test(text)) {
+        hometown = text.replace(/^Hometown:\s*/i, "").trim() || null;
+        if (hometown) country = country ?? inferCountryFromLocation(hometown);
+        return;
+      }
+
       if (!/^Born:/i.test(text)) return;
 
       const flagClass = $(el).find("[class*='f-i']").attr("class") ?? "";
@@ -322,7 +361,7 @@ export class BrefClient {
 
       const bornText = text.replace(/\s+[a-z]{2}\s*$/i, "").trim();
       const bornLocation = parseBornParagraph(bornText);
-      hometown = bornLocation.hometown;
+      hometown = hometown ?? bornLocation.hometown;
       if (!country) country = bornLocation.country;
     });
 
@@ -330,6 +369,10 @@ export class BrefClient {
       const jsonLd = parseJsonLdBirthPlace(pageHtml);
       hometown = hometown ?? jsonLd.hometown;
       country = country ?? jsonLd.country;
+    }
+
+    if (hometown && !country) {
+      country = inferCountryFromLocation(hometown);
     }
 
     let jerseyNumber: string | null = null;

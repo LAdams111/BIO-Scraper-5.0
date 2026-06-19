@@ -16,6 +16,7 @@
     "scrape:backfill": "node dist/index.js --backfill",
     "scrape:wnba": "node dist/index.js --league wnba",
     "scrape:wnba-backfill": "node dist/index.js --league wnba --backfill",
+    "scrape:ncaa-backfill": "node dist/index.js --league ncaa --backfill",
     "scrape:dry-run": "node dist/index.js --dry-run"
   },
   "dependencies": {

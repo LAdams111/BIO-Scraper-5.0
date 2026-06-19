@@ -1,4 +1,4 @@
-export type ScrapeLeague = "nba" | "wnba";
+export type ScrapeLeague = "nba" | "wnba" | "ncaa";
 
 export interface LeagueConfig {
   slug: ScrapeLeague;
@@ -39,6 +39,18 @@ export const LEAGUE_CONFIG: Record<ScrapeLeague, LeagueConfig> = {
     linkCachePath: "bref-wnba-link.cache.json",
     slugCachePath: "bref-wnba-player-slugs.cache.json",
   },
+  ncaa: {
+    slug: "ncaa",
+    label: "NCAA D-I Men's",
+    bioSource: "usbasket-ncaa-d1",
+    linkSource: "usbasket-ncaa-d1",
+    playersPath: "cbb/players",
+    slugFilter: () => true,
+    checkpointPath: "scrape-bio-ncaa-backfill.checkpoint.json",
+    logPath: "scrape-bio-ncaa-backfill.log",
+    linkCachePath: "ncaa-cbb-slug.cache.json",
+    slugCachePath: "ncaa-player-external-ids.cache.json",
+  },
 };
 
 export function getLeagueConfig(league: ScrapeLeague): LeagueConfig {
@@ -49,5 +61,6 @@ export function parseLeague(value: string | undefined): ScrapeLeague {
   const normalized = value?.trim().toLowerCase();
   if (!normalized || normalized === "nba") return "nba";
   if (normalized === "wnba") return "wnba";
-  throw new Error(`Invalid league: ${value}. Use "nba" or "wnba".`);
+  if (normalized === "ncaa") return "ncaa";
+  throw new Error(`Invalid league: ${value}. Use "nba", "wnba", or "ncaa".`);
 }
