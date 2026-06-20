@@ -1,4 +1,5 @@
 import { parseUsbasketBioFromHtml, type UsbasketPlayerBio } from "./usbasket/playerMeta.js";
+import { resolveJerseyFromRosters } from "./usbasket/rosterJersey.js";
 import { backoffMs, jitterMs, parseRetryAfterMs, sleep } from "./utils/rateLimiter.js";
 
 const USER_AGENT =
@@ -95,6 +96,19 @@ export class UsbasketClient {
     fallbackPosition?: string | null,
   ): Promise<UsbasketPlayerBio> {
     const html = await this.fetchHtml(usbasketPlayerUrl(externalId, displayName));
-    return parseUsbasketBioFromHtml(html, externalId, displayName, fallbackPosition ?? null);
+    const bio = parseUsbasketBioFromHtml(html, externalId, displayName, fallbackPosition ?? null);
+
+    if (!bio.jerseyNumber) {
+      const rosterJersey = await resolveJerseyFromRosters(
+        (url) => this.fetchHtml(url),
+        html,
+        externalId,
+      );
+      if (rosterJersey) {
+        bio.jerseyNumber = rosterJersey;
+      }
+    }
+
+    return bio;
   }
 }

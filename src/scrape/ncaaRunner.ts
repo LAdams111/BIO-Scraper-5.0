@@ -56,7 +56,7 @@ function mergeWithSportsReference(
     weightKg: usb.weightKg ?? sr.weightKg,
     hometown: usb.hometown ?? sr.hometown,
     country: usb.country ?? sr.country,
-    jerseyNumber: sr.jerseyNumber,
+    jerseyNumber: usb.jerseyNumber ?? sr.jerseyNumber,
   };
 }
 
@@ -174,7 +174,7 @@ export async function runNcaaScrape(
 
       const needsJersey = !profile.jerseyNumber || profile.jerseyNumber.trim() === "";
       const needsSrFallback =
-        needsJersey ||
+        (needsJersey && !usbBio.jerseyNumber) ||
         !usbBio.birthDate ||
         !usbBio.hometown ||
         !usbBio.heightCm ||
@@ -195,6 +195,7 @@ export async function runNcaaScrape(
 
       console.log(
         `${label}: ${merged.displayName} ← usbasket/${player.externalId}` +
+          (merged.jerseyNumber ? ` #${merged.jerseyNumber}` : "") +
           (merged.birthDate ? ` DOB ${merged.birthDate}` : "") +
           (merged.hometown ? ` from ${merged.hometown}` : ""),
       );

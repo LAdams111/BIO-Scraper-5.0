@@ -36,6 +36,7 @@ export interface UsbasketPlayerBio {
   position: string | null;
   heightCm: number | null;
   weightKg: number | null;
+  jerseyNumber: string | null;
   hometown: string | null;
   country: string | null;
 }
@@ -84,6 +85,29 @@ function extractHeightCm(text: string): number | null {
   if (feet) {
     const totalInches = Number.parseInt(feet[1], 10) * 12 + Number.parseInt(feet[2], 10);
     return Math.round(totalInches * 2.54);
+  }
+
+  return null;
+}
+
+export function extractJerseyNumber(html: string, text: string): string | null {
+  const patterns = [
+    /Uniform\s*#\s*:?\s*(\d{1,2})\b/i,
+    /Uniform\s*:\s*(\d{1,2})\b/i,
+    /Jersey\s*#\s*:?\s*(\d{1,2})\b/i,
+    /What number did[^?]+\?<\/h3><p>[^<]*?\b(\d{1,2})\b/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = pattern.exec(html) ?? pattern.exec(text);
+    if (match) return match[1];
+  }
+
+  const $ = load(html);
+  for (const selector of [".smallerwidthplayerleftinner", ".player-details"]) {
+    const blockText = $(selector).first().text().replace(/\s+/g, " ");
+    const labelMatch = /Uniform\s*#\s*:?\s*(\d{1,2})\b/i.exec(blockText);
+    if (labelMatch) return labelMatch[1];
   }
 
   return null;
@@ -144,6 +168,7 @@ export function parseUsbasketBioFromHtml(
   }
 
   const hometown = extractHometown(combined);
+  const jerseyNumber = extractJerseyNumber(html, combined);
 
   return {
     externalId,
@@ -152,6 +177,7 @@ export function parseUsbasketBioFromHtml(
     position: normalizePosition(position),
     heightCm: extractHeightCm(combined),
     weightKg: extractWeightKg(combined),
+    jerseyNumber,
     hometown,
     country: inferCountryFromLocation(hometown),
   };
